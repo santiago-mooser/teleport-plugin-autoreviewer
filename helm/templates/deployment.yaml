@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "teleport-autoreviewer.fullname" . }}
+  labels:
+    {{- include "teleport-autoreviewer.labels" . | nindent 4 }}
+  {{- with (include "teleport-autoreviewer.annotations" .) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "teleport-autoreviewer.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- include "teleport-autoreviewer.podTemplateAnnotations" . | nindent 8 }}
+      labels:
+        {{- include "teleport-autoreviewer.podTemplateLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "teleport-autoreviewer.serviceAccountName" . }}
+      securityContext:
+        {{- include "teleport-autoreviewer.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: teleport-autoreviewer
+          securityContext:
+            {{- include "teleport-autoreviewer.securityContext" . | nindent 12 }}
+          image: {{ include "teleport-autoreviewer.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.server.healthPort }}
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          envFrom:
+            {{- with .Values.envFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            {{- if .Values.teleport.identityFile }}
+            - name: identity
+              mountPath: /etc/teleport/identity
+              subPath: identity
+              readOnly: true
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "teleport-autoreviewer.fullname" . }}-config
+        {{- if .Values.teleport.identityFile }}
+        - name: identity
+          secret:
+            secretName: {{ include "teleport-autoreviewer.fullname" . }}-identity
+            defaultMode: 0400
+        {{- end }}
+        - name: tmp
+          emptyDir: {}
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,19 @@
+# Configuration for the teleport-autoreviewer service
+
+teleport:
+  addr: "teleport.example.com:443"
+  identity: "/var/lib/teleport/bot/identity"
+  reviewer: "teleport-autoreviewer"
+  identity_refresh_interval: "1h"
+
+server:
+  health_port: 8080
+  health_path: "/health"
+
+rejection:
+  default_message: "Access request rejected due to policy violation"
+  rules:
+    - name: "Rule for accessing production"
+      roles_regex: "^f(.*)prod(.*)$"
+      reason_regex: "(.*)\\w+TECH\\w+(.*)"
+      message: "Access requests for production must be linked to a TECH ticket"

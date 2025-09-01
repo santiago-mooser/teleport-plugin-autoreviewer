@@ -1,0 +1,253 @@
+# Default values for teleport-autoreviewer.
+# This is a YAML-formatted file.
+# Declare variables to be substituted into your templates.
+
+replicaCount: 2
+
+image:
+  repository: teleport-autoreviewer
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Teleport configuration
+teleport:
+  # Teleport cluster address
+  addr: "teleport.example.com:443"
+  # Identity file content (will be stored in a secret)
+  identityFile: ""
+  # Identity refresh interval
+  identityRefreshInterval: "1h"
+  # Reviewer name
+  reviewer: "teleport-autoreviewer"
+
+# Server configuration
+server:
+  healthPort: 8080
+  healthPath: "/health"
+
+# Rejection rules configuration
+rejection:
+  defaultMessage: "Access request rejected due to policy violation"
+  rules: []
+    # Example rules:
+    # - name: "EKS Production Rule"
+    #   roles_regex: "^(.*)prod(.*)$"
+    #   reason_regex: "((.*)\\w+TECH\\w+(.*))"
+    #   message: "EKS production access requires TECH ticket"
+    # - name: "QA Environment Rule"
+    #   roles_regex: "^qa-(.*)$"
+    #   reason_regex: "((.*)\\w+QAUTO\\w+(.*))|((.*)\\w+QA\\w+(.*))"
+    #   message: "QA access requires QAUTO or QA ticket"
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: teleport-autoreviewer.local
+      paths:
+        - path: /health
+          pathType: Prefix
+  tls: []
+  #  - secretName: teleport-autoreviewer-tls
+  #    hosts:
+  #      - teleport-autoreviewer.local
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Additional volumes on the output Deployment definition.
+volumes: []
+# - name: foo
+#   secret:
+#     secretName: mysecret
+#     optional: false
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts: []
+# - name: foo
+#   mountPath: "/etc/foo"
+#   readOnly: true
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - teleport-autoreviewer
+        topologyKey: kubernetes.io/hostname
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# Network Policy
+networkPolicy:
+  enabled: true
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from: []
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # Allow DNS resolution
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow HTTPS to Teleport cluster
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+
+# RBAC
+rbac:
+  create: true
+  rules: []
+    # Add any additional RBAC rules if needed
+    # - apiGroups: [""]
+    #   resources: ["configmaps"]
+    #   verbs: ["get", "list"]
+
+# Environment variables
+env: []
+  # - name: LOG_LEVEL
+  #   value: "info"
+
+# Environment variables from secrets/configmaps
+envFrom: []
+  # - secretRef:
+  #     name: teleport-autoreviewer-secrets
+  # - configMapRef:
+  #     name: teleport-autoreviewer-config
+
+# Additional labels to add to all resources
+commonLabels: {}
+
+# Additional annotations to add to all resources
+commonAnnotations: {}
+
+# Pod security standards
+podSecurityStandards:
+  enforce: "restricted"
+  audit: "restricted"
+  warn: "restricted"
+
+# Monitoring and observability
+monitoring:
+  enabled: false
+  serviceMonitor:
+    enabled: false
+    annotations: {}
+    labels: {}
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+    scheme: http
+
+# External secrets integration
+externalSecrets:
+  enabled: false
+  secretStore:
+    name: ""
+    kind: SecretStore
+  refreshInterval: "1h"
+  data: []
+    # - secretKey: identity
+    #   remoteRef:
+    #     key: teleport/identity
+    #     property: content

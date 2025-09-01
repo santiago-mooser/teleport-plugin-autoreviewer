@@ -1,0 +1,36 @@
+# Git files
+.git
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# Build artifacts
+teleport-autoreviewer
+*.log
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+*_test.go
+test/
+coverage.out
+
+# Helm charts (not needed in container)
+helm/
+
+# Identity files (should be mounted, not built in)
+identity
+
+# Temporary files
+tmp/
+temp/
