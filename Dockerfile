@@ -1,60 +1,36 @@
 # syntax=docker/dockerfile:1
+### Build
+ARG GO_VERSION=1.23.10
+ARG ALPINE_VERSION=3.22
 
 # Build stage
-FROM golang:1.23-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
 
-# Install git and ca-certificates (needed for go modules and HTTPS)
-RUN apk add --no-cache git ca-certificates tzdata
+# Dependency
+RUN apk add --no-cache git gcc g++ make
 
-# Create appuser for the final image
-RUN adduser -D -g '' appuser
-
-# Set working directory
-WORKDIR /build
-
-# Copy go mod files first for better caching
-COPY go.mod go.sum ./
-
-# Download dependencies
+# Install dependencies
+WORKDIR /src
+COPY go.mod .
+COPY go.sum .
 RUN go mod download
 
 # Copy source code
 COPY . .
-
-# Build the binary with optimizations for static linking
-# Use build arguments to support multi-platform builds
-ARG TARGETOS=linux
-ARG TARGETARCH
-
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
-    -ldflags='-w -s -extldflags "-static"' \
-    -a -installsuffix cgo \
-    -o teleport-autoreviewer .
+ARG TARGETOS TARGETARCH
+RUN CGO_ENABLED=0 make build
 
 # Final stage - distroless
 FROM gcr.io/distroless/static-debian12:nonroot
 
-# Copy timezone data
-COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
-
-# Copy ca-certificates
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-
-# Copy the binary
-COPY --from=builder /build/teleport-autoreviewer /usr/local/bin/teleport-autoreviewer
-
-# Use nonroot user (uid 65532)
-USER nonroot:nonroot
-
 # Set working directory
 WORKDIR /app
 
-# Expose health check port
-EXPOSE 8080
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD ["/usr/local/bin/teleport-autoreviewer", "-health-check"] || exit 1
+# Copy the binary
+COPY --from=builder \
+    --chown=nonroot:nonroot \
+    /src/teleport-plugin-request-autoreviewer \
+    /app/teleport-plugin-request-autoreviewer
 
 # Set entrypoint
-ENTRYPOINT ["/usr/local/bin/teleport-autoreviewer"]
+ENTRYPOINT ["/app/teleport-plugin-request-autoreviewer"]

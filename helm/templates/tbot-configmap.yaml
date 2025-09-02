@@ -1,0 +1,15 @@
+{{- if .Values.tbot.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "teleport-plugin-request-autoreviewer.tbot.fullname" . }}-config
+  labels:
+    {{- include "teleport-plugin-request-autoreviewer.tbot.labels" . | nindent 4 }}
+  {{- with (include "teleport-plugin-request-autoreviewer.annotations" .) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
+data:
+  config.yaml: |
+    {{- include "teleport-plugin-request-autoreviewer.tbot.config" . | nindent 4 }}
+{{- end }}

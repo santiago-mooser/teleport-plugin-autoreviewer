@@ -2,17 +2,17 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "teleport-autoreviewer.fullname" . }}
+  name: {{ include "teleport-plugin-request-autoreviewer.fullname" . }}
   labels:
-    {{- include "teleport-autoreviewer.labels" . | nindent 4 }}
-  {{- with (include "teleport-autoreviewer.annotations" .) }}
+    {{- include "teleport-plugin-request-autoreviewer.labels" . | nindent 4 }}
+  {{- with (include "teleport-plugin-request-autoreviewer.annotations" .) }}
   annotations:
     {{- . | nindent 4 }}
   {{- end }}
 spec:
   podSelector:
     matchLabels:
-      {{- include "teleport-autoreviewer.selectorLabels" . | nindent 6 }}
+      {{- include "teleport-plugin-request-autoreviewer.selectorLabels" . | nindent 6 }}
   policyTypes:
     {{- toYaml .Values.networkPolicy.policyTypes | nindent 4 }}
   {{- if .Values.networkPolicy.ingress }}

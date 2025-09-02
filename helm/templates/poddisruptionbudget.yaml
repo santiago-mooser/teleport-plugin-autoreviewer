@@ -2,10 +2,10 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "teleport-autoreviewer.fullname" . }}
+  name: {{ include "teleport-plugin-request-autoreviewer.fullname" . }}
   labels:
-    {{- include "teleport-autoreviewer.labels" . | nindent 4 }}
-  {{- with (include "teleport-autoreviewer.annotations" .) }}
+    {{- include "teleport-plugin-request-autoreviewer.labels" . | nindent 4 }}
+  {{- with (include "teleport-plugin-request-autoreviewer.annotations" .) }}
   annotations:
     {{- . | nindent 4 }}
   {{- end }}
@@ -18,5 +18,5 @@ spec:
   {{- end }}
   selector:
     matchLabels:
-      {{- include "teleport-autoreviewer.selectorLabels" . | nindent 6 }}
+      {{- include "teleport-plugin-request-autoreviewer.selectorLabels" . | nindent 6 }}
 {{- end }}

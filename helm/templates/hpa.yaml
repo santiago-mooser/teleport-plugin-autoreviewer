@@ -2,10 +2,10 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "teleport-autoreviewer.fullname" . }}
+  name: {{ include "teleport-plugin-request-autoreviewer.fullname" . }}
   labels:
-    {{- include "teleport-autoreviewer.labels" . | nindent 4 }}
-  {{- with (include "teleport-autoreviewer.annotations" .) }}
+    {{- include "teleport-plugin-request-autoreviewer.labels" . | nindent 4 }}
+  {{- with (include "teleport-plugin-request-autoreviewer.annotations" .) }}
   annotations:
     {{- . | nindent 4 }}
   {{- end }}
@@ -13,7 +13,7 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "teleport-autoreviewer.fullname" . }}
+    name: {{ include "teleport-plugin-request-autoreviewer.fullname" . }}
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
   metrics:

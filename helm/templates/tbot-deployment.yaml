@@ -1,0 +1,160 @@
+{{- if .Values.tbot.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "teleport-plugin-request-autoreviewer.tbot.fullname" . }}
+  labels:
+    {{- include "teleport-plugin-request-autoreviewer.tbot.labels" . | nindent 4 }}
+  {{- with (include "teleport-plugin-request-autoreviewer.annotations" .) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
+spec:
+  # Replicas are set to 1 until we establish a locking mechanism for the
+  # `kubernetes_secret` destination.
+  replicas: 1
+  strategy:
+    # Recreate strategy until we establish a locking mechanism for the
+    # `kubernetes_secret` destination.
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "teleport-plugin-request-autoreviewer.tbot.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # ConfigMap checksum, to recreate the pod on config changes.
+        checksum/config: {{ include "teleport-plugin-request-autoreviewer.tbot.config" . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with (include "teleport-plugin-request-autoreviewer.annotations" .) }}
+        {{- . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "teleport-plugin-request-autoreviewer.tbot.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tbot.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tbot.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tbot.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: tbot
+          image: {{ include "teleport-plugin-request-autoreviewer.tbot.image" . }}
+          imagePullPolicy: {{ .Values.tbot.image.pullPolicy }}
+          args:
+            - start
+            - -c
+            - /config/config.yaml
+            {{- if .Values.tbot.debug }}
+            - --debug
+            {{- end }}
+            - --log-format
+            - json
+            - --diag-addr
+            - 0.0.0.0:3001
+          env:
+            # POD_NAMESPACE is required for the kubernetes_secret destination
+            # type to work correctly.
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            # TELEPORT_NODE_NAME is required for Workload Identity Kubernetes
+            # Workload Attestation to work correctly.
+            - name: TELEPORT_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            {{- if eq (include "teleport-plugin-request-autoreviewer.tbot.useInCluster" .) "true" }}
+            # KUBERNETES_TOKEN_PATH specifies the path to the service account
+            # JWT to use for joining.
+            # This path is based on the configuration of the volume and
+            # volumeMount.
+            - name: KUBERNETES_TOKEN_PATH
+              value: /var/run/secrets/tokens/join-sa-token
+            {{- end }}
+            {{- if .Values.tbot.anonymousTelemetry }}
+            - name: TELEPORT_ANONYMOUS_TELEMETRY
+              value: "1"
+            {{- end }}
+            {{- with .Values.tbot.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - mountPath: /config
+              name: config
+              readOnly: true
+            {{- if eq (include "teleport-plugin-request-autoreviewer.tbot.useInCluster" .) "true" }}
+            - mountPath: /var/run/secrets/tokens
+              name: join-sa-token
+              readOnly: true
+            {{- end }}
+          {{- with .Values.tbot.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- include "teleport-plugin-request-autoreviewer.securityContext" . | nindent 12 }}
+          ports:
+            - containerPort: 3001
+              name: diagnostics
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: diagnostics
+            initialDelaySeconds: 10 # After an initial 10 seconds
+            periodSeconds: 10 # Check every 10 seconds
+            failureThreshold: 6 # After 60 (6x10) seconds of failure, kill pod
+            timeoutSeconds: 5 # Wait 5 seconds for the probe to complete
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: diagnostics
+            initialDelaySeconds: 5 # After an initial 5 seconds
+            periodSeconds: 10 # Check every 10 seconds
+            failureThreshold: 3 # After 30 (3x10) seconds of failure, mark pod unready
+            timeoutSeconds: 5 # Wait 5 seconds for the probe to complete
+      serviceAccountName: {{ include "teleport-plugin-request-autoreviewer.tbot.serviceAccountName" . }}
+      securityContext:
+        {{- include "teleport-plugin-request-autoreviewer.podSecurityContext" . | nindent 8 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "teleport-plugin-request-autoreviewer.tbot.fullname" . }}-config
+        {{- if eq (include "teleport-plugin-request-autoreviewer.tbot.useInCluster" .) "true" }}
+        - name: join-sa-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: join-sa-token
+                  # 600 seconds is the minimum that Kubernetes supports. We
+                  # recommend this value is used.
+                  expirationSeconds: 600
+                  {{- if .Values.tbot.authentication.clusterName }}
+                  audience: {{ .Values.tbot.authentication.clusterName }}
+                  {{- else }}
+                  # Use default teleport addr minus the colon and port number
+                  audience: {{ .Values.teleport.addr | replace ":443" "" }}
+                  {{- end }}
+        {{- end }}
+{{- end }}

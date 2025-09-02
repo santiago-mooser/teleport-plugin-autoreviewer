@@ -1,48 +1,191 @@
-# Default values for teleport-autoreviewer.
-# This is a YAML-formatted file.
-# Declare variables to be substituted into your templates.
+# ================================
+# BASIC CONFIGURATION
+# ================================
 
-replicaCount: 2
+argocd:
+  namespace: security-automation
+  releaseName: teleport-plugin-requests-autoreviewer
+
+replicaCount: 1
 
 image:
-  repository: teleport-autoreviewer
+
+  # make sure to change these to the repo where you're storing your image
+  repository: ""
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
 
-imagePullSecrets: []
+imagePullSecrets:
+  - name: regcred
 nameOverride: ""
 fullnameOverride: ""
 
-# Teleport configuration
+# ================================
+# TELEPORT CONNECTION
+# ================================
+
 teleport:
   # Teleport cluster address
-  addr: "teleport.example.com:443"
-  # Identity file content (will be stored in a secret)
-  identityFile: ""
-  # Identity refresh interval
+  addr: "your-cluster.tld:443"
+  # Reviewer name for the autoreviewer
+  reviewer: "teleport-plugin-request-autoreviewer"
+  # Identity refresh interval (only used with manual identity file)
   identityRefreshInterval: "1h"
-  # Reviewer name
-  reviewer: "teleport-autoreviewer"
+  # Manual identity file content (will be stored in a secret)
+  # NOTE: This is deprecated in favor of using tbot for automated identity management
+  identityFile: ""
 
-# Server configuration
+# ================================
+# MACHINE ID / TBOT CONFIGURATION
+# ================================
+# Machine ID enables automated identity management for the autoreviewer
+# It's enabled by default and uses in-cluster Kubernetes authentication
+
+tbot:
+  # Enable tbot deployment for automated identity management
+  enabled: true
+
+  # Authentication configuration
+  authentication:
+    # Join method - defaults to "kubernetes" for in-cluster authentication
+    method: "kubernetes"
+    # Machine ID token name. Make sure to create it in teleport before deploying.
+    token: "request-autoreviewer"
+    # Teleport cluster name (optional, for cross-cluster authentication). Leave blank if using in-cluster
+    clusterName: ""
+    # Custom teleport address for tbot (defaults to teleport.addr)
+    addr: ""
+
+  # tbot image configuration
+  image:
+    repository: public.ecr.aws/gravitational/tbot-distroless
+    tag: "18.1.5"
+    pullPolicy: IfNotPresent
+
+  # Identity output configuration
+  output:
+    # Name of the secret to create with the identity
+    # Defaults to <release-name>-teleport-identity
+    secretName: ""
+    # How often to renew the identity
+    renewInterval: "20m"
+    # Certificate lifetime
+    certificateLifetime: "1h"
+
+  # Advanced configuration options (override the generated config)
+  config:
+    # Custom tbot configuration - merges with generated config
+    # Use this to override any tbot settings not covered by the above options
+    additional: {}
+
+  # Resource configuration for tbot pod
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+  # Additional environment variables for tbot
+  env: []
+
+  # Node placement
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  # Debug mode
+  debug: false
+
+  # Anonymous telemetry
+  anonymousTelemetry: false
+
+# ================================
+# ACCESS REQUEST RULES
+# ================================
+
+rejection:
+  defaultMessage: "Access request rejected due to policy violation"
+  rules:
+    - name: "Reject prod access requests that don't link a ticket"
+      roles_regex: "^(.*-)?prod(.*)$"
+      reason_regex: "((.*)\\w+TECH\\w+(.*))"
+      message: "Access requests for production must be linked to a ticket from the TECH project"
+
+# ================================
+# APPLICATION CONFIGURATION
+# ================================
+
 server:
   healthPort: 8080
   healthPath: "/health"
 
-# Rejection rules configuration
-rejection:
-  defaultMessage: "Access request rejected due to policy violation"
-  rules: []
-    # Example rules:
-    # - name: "EKS Production Rule"
-    #   roles_regex: "^(.*)prod(.*)$"
-    #   reason_regex: "((.*)\\w+TECH\\w+(.*))"
-    #   message: "EKS production access requires TECH ticket"
-    # - name: "QA Environment Rule"
-    #   roles_regex: "^qa-(.*)$"
-    #   reason_regex: "((.*)\\w+QAUTO\\w+(.*))|((.*)\\w+QA\\w+(.*))"
-    #   message: "QA access requires QAUTO or QA ticket"
+# Application resources
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Health checks
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Horizontal Pod Autoscaling
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Environment variables
+env: []
+  # - name: LOG_LEVEL
+  #   value: "info"
+
+# Environment variables from secrets/configmaps
+envFrom: []
+  # - secretRef:
+  #     name: teleport-plugin-request-autoreviewer-secrets
+  # - configMapRef:
+  #     name: teleport-plugin-request-autoreviewer-config
+
+# Additional volumes on the output Deployment definition.
+volumes: []
+# - name: foo
+#   secret:
+#     secretName: mysecret
+#     optional: false
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts: []
+# - name: foo
+#   mountPath: "/etc/foo"
+#   readOnly: true
+
+# ================================
+# KUBERNETES RESOURCES
+# ================================
 
 serviceAccount:
   # Specifies whether a service account should be created
@@ -55,8 +198,31 @@ serviceAccount:
   # If not set and create is true, a name is generated using the fullname template
   name: ""
 
-podAnnotations: {}
-podLabels: {}
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: teleport-plugin-request-autoreviewer.local
+      paths:
+        - path: /health
+          pathType: Prefix
+  tls: []
+  #  - secretName: teleport-plugin-request-autoreviewer-tls
+  #    hosts:
+  #      - teleport-plugin-request-autoreviewer.local
+
+# ================================
+# SECURITY CONFIGURATION
+# ================================
 
 podSecurityContext:
   runAsNonRoot: true
@@ -78,96 +244,11 @@ securityContext:
   seccompProfile:
     type: RuntimeDefault
 
-service:
-  type: ClusterIP
-  port: 8080
-  targetPort: 8080
-  annotations: {}
-
-ingress:
-  enabled: false
-  className: ""
-  annotations: {}
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
-  hosts:
-    - host: teleport-autoreviewer.local
-      paths:
-        - path: /health
-          pathType: Prefix
-  tls: []
-  #  - secretName: teleport-autoreviewer-tls
-  #    hosts:
-  #      - teleport-autoreviewer.local
-
-resources:
-  limits:
-    cpu: 500m
-    memory: 512Mi
-  requests:
-    cpu: 100m
-    memory: 128Mi
-
-livenessProbe:
-  httpGet:
-    path: /health
-    port: http
-  initialDelaySeconds: 30
-  periodSeconds: 30
-  timeoutSeconds: 5
-  failureThreshold: 3
-
-readinessProbe:
-  httpGet:
-    path: /health
-    port: http
-  initialDelaySeconds: 5
-  periodSeconds: 10
-  timeoutSeconds: 5
-  failureThreshold: 3
-
-autoscaling:
-  enabled: false
-  minReplicas: 2
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 80
-  targetMemoryUtilizationPercentage: 80
-
-# Additional volumes on the output Deployment definition.
-volumes: []
-# - name: foo
-#   secret:
-#     secretName: mysecret
-#     optional: false
-
-# Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
-# - name: foo
-#   mountPath: "/etc/foo"
-#   readOnly: true
-
-nodeSelector: {}
-
-tolerations: []
-
-affinity:
-  podAntiAffinity:
-    preferredDuringSchedulingIgnoredDuringExecution:
-    - weight: 100
-      podAffinityTerm:
-        labelSelector:
-          matchExpressions:
-          - key: app.kubernetes.io/name
-            operator: In
-            values:
-            - teleport-autoreviewer
-        topologyKey: kubernetes.io/hostname
-
-# Pod Disruption Budget
-podDisruptionBudget:
-  enabled: true
-  minAvailable: 1
-  # maxUnavailable: 1
+# Pod security standards
+podSecurityStandards:
+  enforce: "restricted"
+  audit: "restricted"
+  warn: "restricted"
 
 # Network Policy
 networkPolicy:
@@ -203,29 +284,44 @@ rbac:
     #   resources: ["configmaps"]
     #   verbs: ["get", "list"]
 
-# Environment variables
-env: []
-  # - name: LOG_LEVEL
-  #   value: "info"
+# ================================
+# POD CONFIGURATION
+# ================================
 
-# Environment variables from secrets/configmaps
-envFrom: []
-  # - secretRef:
-  #     name: teleport-autoreviewer-secrets
-  # - configMapRef:
-  #     name: teleport-autoreviewer-config
+podAnnotations: {}
+podLabels: {}
 
-# Additional labels to add to all resources
-commonLabels: {}
+# Node placement
+nodeSelector: {}
 
-# Additional annotations to add to all resources
-commonAnnotations: {}
+tolerations: []
 
-# Pod security standards
-podSecurityStandards:
-  enforce: "restricted"
-  audit: "restricted"
-  warn: "restricted"
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - teleport-plugin-request-autoreviewer
+        topologyKey: kubernetes.io/hostname
+
+# ================================
+# RESILIENCE & AVAILABILITY
+# ================================
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# ================================
+# OBSERVABILITY & MONITORING
+# ================================
 
 # Monitoring and observability
 monitoring:
@@ -239,6 +335,10 @@ monitoring:
     path: /metrics
     scheme: http
 
+# ================================
+# INTEGRATION & EXTERNAL SERVICES
+# ================================
+
 # External secrets integration
 externalSecrets:
   enabled: false
@@ -251,3 +351,13 @@ externalSecrets:
     #   remoteRef:
     #     key: teleport/identity
     #     property: content
+
+# ================================
+# GLOBAL CONFIGURATION
+# ================================
+
+# Additional labels to add to all resources
+commonLabels: {}
+
+# Additional annotations to add to all resources
+commonAnnotations: {}

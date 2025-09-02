@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "teleport-autoreviewer.fullname" . }}-config
+  name: {{ include "teleport-plugin-request-autoreviewer.fullname" . }}-config
   labels:
-    {{- include "teleport-autoreviewer.labels" . | nindent 4 }}
-  {{- with (include "teleport-autoreviewer.annotations" .) }}
+    {{- include "teleport-plugin-request-autoreviewer.labels" . | nindent 4 }}
+  {{- with (include "teleport-plugin-request-autoreviewer.annotations" .) }}
   annotations:
     {{- . | nindent 4 }}
   {{- end }}
 data:
   config.yaml: |
-    {{- include "teleport-autoreviewer.config" . | nindent 4 }}
+    {{- include "teleport-plugin-request-autoreviewer.config" . | nindent 4 }}

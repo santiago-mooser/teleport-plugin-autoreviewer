@@ -1,10 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "teleport-autoreviewer.fullname" . }}
+  name: {{ include "teleport-plugin-request-autoreviewer.fullname" . }}
   labels:
-    {{- include "teleport-autoreviewer.labels" . | nindent 4 }}
-  {{- with (include "teleport-autoreviewer.annotations" .) }}
+    {{- include "teleport-plugin-request-autoreviewer.labels" . | nindent 4 }}
+  {{- with (include "teleport-plugin-request-autoreviewer.annotations" .) }}
   annotations:
     {{- . | nindent 4 }}
   {{- end }}
@@ -14,26 +14,26 @@ spec:
   {{- end }}
   selector:
     matchLabels:
-      {{- include "teleport-autoreviewer.selectorLabels" . | nindent 6 }}
+      {{- include "teleport-plugin-request-autoreviewer.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
-        {{- include "teleport-autoreviewer.podTemplateAnnotations" . | nindent 8 }}
+        {{- include "teleport-plugin-request-autoreviewer.podTemplateAnnotations" . | nindent 8 }}
       labels:
-        {{- include "teleport-autoreviewer.podTemplateLabels" . | nindent 8 }}
+        {{- include "teleport-plugin-request-autoreviewer.podTemplateLabels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "teleport-autoreviewer.serviceAccountName" . }}
+      serviceAccountName: {{ include "teleport-plugin-request-autoreviewer.serviceAccountName" . }}
       securityContext:
-        {{- include "teleport-autoreviewer.podSecurityContext" . | nindent 8 }}
+        {{- include "teleport-plugin-request-autoreviewer.podSecurityContext" . | nindent 8 }}
       containers:
-        - name: teleport-autoreviewer
+        - name: teleport-plugin-request-autoreviewer
           securityContext:
-            {{- include "teleport-autoreviewer.securityContext" . | nindent 12 }}
-          image: {{ include "teleport-autoreviewer.image" . }}
+            {{- include "teleport-plugin-request-autoreviewer.securityContext" . | nindent 12 }}
+          image: {{ include "teleport-plugin-request-autoreviewer.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
@@ -58,7 +58,7 @@ spec:
               mountPath: /app/config.yaml
               subPath: config.yaml
               readOnly: true
-            {{- if .Values.teleport.identityFile }}
+            {{- if or .Values.teleport.identityFile .Values.tbot.enabled }}
             - name: identity
               mountPath: /etc/teleport/identity
               subPath: identity
@@ -72,11 +72,11 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: {{ include "teleport-autoreviewer.fullname" . }}-config
-        {{- if .Values.teleport.identityFile }}
+            name: {{ include "teleport-plugin-request-autoreviewer.fullname" . }}-config
+        {{- if or .Values.teleport.identityFile .Values.tbot.enabled }}
         - name: identity
           secret:
-            secretName: {{ include "teleport-autoreviewer.fullname" . }}-identity
+            secretName: {{ include "teleport-plugin-request-autoreviewer.identitySecretName" . }}
             defaultMode: 0400
         {{- end }}
         - name: tmp

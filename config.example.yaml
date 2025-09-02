@@ -14,6 +14,6 @@ rejection:
   default_message: "Access request rejected due to policy violation"
   rules:
     - name: "Rule for accessing production"
-      roles_regex: "^f(.*)prod(.*)$"
+      roles_regex: "^(.*)prod(.*)$"
       reason_regex: "(.*)\\w+TECH\\w+(.*)"
       message: "Access requests for production must be linked to a TECH ticket"
